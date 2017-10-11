@@ -1,6 +1,7 @@
 'use strict';
 
 const NodeSSH = require('node-ssh');
+const ssh = new NodeSSH();
 
 function BunyanSSH(options, error) {
     options = options || {};
@@ -25,7 +26,21 @@ function BunyanSSH(options, error) {
     if (options.stdout) {
         this.stdout = options.stdout;
     }
+
+    return this._connect();
 }
+
+BunyanSSH.prototype._connect = function () {
+    return ssh.connect({
+        host: this.host,
+        username: this.username,
+        privateKey: this.privateKey
+    });
+};
+
+BunyanSSH.prototype.sendLogRecord = function (record) {
+    return ssh.execCommand(`echo -n '${record}' >> ${this.log_path}`);
+};
 
 BunyanSSH.prototype.write = function (record) {
     const self = this;
@@ -34,16 +49,18 @@ BunyanSSH.prototype.write = function (record) {
         console.log(record);
     }
 
-    const ssh = new NodeSSH();
+    return self._sendLogRecord().then(
+    () => {},
 
-    ssh.connect({
-        host: self.host,
-        username: self.username,
-        privateKey: self.privateKey
-    }).then(() => {
-        return ssh.execCommand(`echo -n '${record}' >> ${self.log_path}`);
-    }).catch((err) => {
-        console.log(err);
+    (error) => {
+        console.log(error);
+        return self._connect().then(() => self._sendLogRecord().then(
+        () => {},
+
+        (error) => {
+            console.log('Couldnt send log over ssh!');
+            console.log(error);
+        }));
     });
 };
 
